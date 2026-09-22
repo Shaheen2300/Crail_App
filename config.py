@@ -7,10 +7,35 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-CHAT_MODEL = os.getenv("CRAIL_CHAT_MODEL", "gpt-4o-mini")
-JUDGE_MODEL = os.getenv("CRAIL_JUDGE_MODEL", "gpt-4o-mini")
-EMBEDDING_MODEL = os.getenv("CRAIL_EMBEDDING_MODEL", "text-embedding-3-small")
+
+def _get_secret(key: str, default: str = "") -> str:
+    """Local dev reads from .env via os.getenv. On Streamlit Community
+    Cloud, secrets are supposed to auto-populate os.environ too, but that
+    silently fails if the secret is nested under a TOML section (e.g. a
+    stray [default] header) instead of top-level - os.getenv finds
+    nothing and there's no error, just an empty string. Falling back to
+    st.secrets directly sidesteps that regardless of the cause. Wrapped
+    defensively since st.secrets needs a secrets.toml file to exist at
+    all (absent in local dev and in plain-script runs like evaluate.py),
+    and raises rather than returning a default when it's missing.
+    """
+    value = os.getenv(key)
+    if value:
+        return value
+    try:
+        import streamlit as st
+
+        if key in st.secrets:
+            return st.secrets[key]
+    except Exception:
+        pass
+    return default
+
+
+OPENAI_API_KEY = _get_secret("OPENAI_API_KEY")
+CHAT_MODEL = _get_secret("CRAIL_CHAT_MODEL", "gpt-4o-mini")
+JUDGE_MODEL = _get_secret("CRAIL_JUDGE_MODEL", "gpt-4o-mini")
+EMBEDDING_MODEL = _get_secret("CRAIL_EMBEDDING_MODEL", "text-embedding-3-small")
 
 # --- RAG pipeline ---
 CHUNK_SIZE = 1000
