@@ -38,7 +38,7 @@ from crail.generation import generate_answer, generate_answer_from_texts
 from crail.grounding import check_grounding
 from crail.ingestion import ingest_pdf
 from crail.intent import classify_intent
-from crail.retrieval import retrieve, retrieve_broad
+from crail.retrieval import FILTER_FETCH_K, retrieve, retrieve_broad, retrieve_scoped
 from crail.rri import crail_decision
 from crail.sensitivity import sweep_contamination_weight, sweep_tier2_threshold
 from crail.viz import get_all_chunks_with_vectors, project_2d
@@ -407,7 +407,7 @@ def grounding_excerpts_for(item: dict, vs) -> list[str]:
     if vs is None:
         return []
     filtered = vs.similarity_search(
-        item["query"], k=4, filter={"source_doc": item["current_doc_id"]}
+        item["query"], k=4, fetch_k=FILTER_FETCH_K, filter={"source_doc": item["current_doc_id"]}
     )
     return [d.page_content for d in filtered]
 
@@ -427,6 +427,7 @@ def review_tab() -> None:
         st.caption("Nothing pending.")
     for item in tier2:
         clean = clean_chunks_of(item)
+        scoped = retrieve_scoped(vs, item["query"], item["current_doc_id"], k=BROAD_TOP_K) if vs is not None else []
         with st.container(border=True):
             st.markdown(f"**Query:** {item['query']}")
             st.markdown(f"**Current document:** `{item['current_doc_id']}`")
@@ -434,7 +435,8 @@ def review_tab() -> None:
             st.caption(
                 f"RRI {item['rri']} | contamination {item['contamination_ratio']} | "
                 f"confidence mismatch: {item['confidence_mismatch']} | "
-                f"{len(clean)}/{len(item['retrieved'])} chunks match the current document"
+                f"{len(clean)}/{len(item['retrieved'])} originally-retrieved chunks matched "
+                f"({len(scoped)} found in a fresh document-scoped search)"
             )
             with st.expander("Retrieved chunks", icon=":material/list:"):
                 for chunk in item["retrieved"]:
@@ -447,11 +449,11 @@ def review_tab() -> None:
                 "Regenerate from matched chunks only",
                 key=f"regen_{item['id']}",
                 icon=":material/auto_awesome:",
-                disabled=not clean,
-                help=None if clean else "No retrieved chunk matches the current document.",
+                disabled=not scoped,
+                help=None if scoped else "No content from the current document was found in the index.",
             ):
                 suggestion = generate_answer_from_texts(
-                    item["query"], [c["content"] for c in clean], client
+                    item["query"], [d.page_content for d in scoped], client
                 )
                 review_queue.patch_item(item["id"], suggested_answer=suggestion)
                 st.rerun()
@@ -491,6 +493,7 @@ def review_tab() -> None:
         st.caption("Nothing pending.")
     for item in tier3:
         clean = clean_chunks_of(item)
+        scoped = retrieve_scoped(vs, item["query"], item["current_doc_id"], k=BROAD_TOP_K) if vs is not None else []
         text_key = f"human_{item['id']}"
         with st.container(border=True):
             st.markdown(f"**Query:** {item['query']}")
@@ -498,7 +501,8 @@ def review_tab() -> None:
             st.caption(
                 f"RRI {item['rri']} | contamination {item['contamination_ratio']} | "
                 f"confidence mismatch: {item['confidence_mismatch']} | "
-                f"{len(clean)}/{len(item['retrieved'])} chunks match the current document"
+                f"{len(clean)}/{len(item['retrieved'])} originally-retrieved chunks matched "
+                f"({len(scoped)} found in a fresh document-scoped search)"
             )
             with st.expander("Model's draft answer (not delivered, for reference only)", icon=":material/description:"):
                 st.text(item["draft_answer"])
@@ -512,13 +516,13 @@ def review_tab() -> None:
                 key=f"suggest_{item['id']}",
                 icon=":material/auto_awesome:",
                 width="stretch",
-                disabled=not clean,
+                disabled=not scoped,
                 help=None
-                if clean
-                else "No retrieved chunk matches the current document, nothing trustworthy to suggest from.",
+                if scoped
+                else "No content from the current document was found in the index, nothing trustworthy to suggest from.",
             ):
                 suggestion = generate_answer_from_texts(
-                    item["query"], [c["content"] for c in clean], client
+                    item["query"], [d.page_content for d in scoped], client
                 )
                 review_queue.patch_item(item["id"], suggested_answer=suggestion)
                 st.session_state[text_key] = suggestion
