@@ -883,7 +883,8 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs(
         ":material/history: Audit log",
         ":material/scatter_plot: Embedding space",
         ":material/tune: Sensitivity analysis",
-    ]
+    ],
+    key="main_tabs",
 )
 with tab1:
     ask_tab()
