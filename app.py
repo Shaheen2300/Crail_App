@@ -154,6 +154,9 @@ def sidebar() -> None:
                         st.success(f"Added {f.name} ({len(docs)} chunks)", icon=":material/check_circle:")
                     except Exception as e:
                         st.error(f"Failed on {f.name}: {e}", icon=":material/error:")
+            # A new document changes what "the current question" even means,
+            # so any question typed for the old context shouldn't survive.
+            st.session_state["ask_query_input"] = ""
             st.rerun()
 
         known = registry.known_doc_ids()
@@ -248,7 +251,7 @@ def ask_tab() -> None:
         help="This is compared against each retrieved chunk's source_doc label.",
     )
 
-    query = st.text_input("Ask a question")
+    query = st.text_input("Ask a question", key="ask_query_input")
     submit = st.button("Ask", type="primary", icon=":material/send:", disabled=not query)
 
     if not submit:
