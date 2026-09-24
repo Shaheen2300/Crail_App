@@ -871,20 +871,23 @@ sidebar()
 _pending_total = len(review_queue.pending_items(tier=2)) + len(review_queue.pending_items(tier=3))
 status_bar(_pending_total)
 
-_review_tab_label = (
-    f":material/fact_check: Review queue ({_pending_total})"
-    if _pending_total
-    else ":material/fact_check: Review queue"
-)
+# Tab labels must be static: `default` below has to match one exactly to
+# restore the active tab after a rerun, and a count that changes as items
+# get resolved (e.g. "Review queue (3)" -> "Review queue (2)") would break
+# that match. The pending count is already visible in the status bar above,
+# so it isn't lost by keeping these labels fixed.
+_TAB_LABELS = [
+    ":material/forum: Ask",
+    ":material/fact_check: Review queue",
+    ":material/history: Audit log",
+    ":material/scatter_plot: Embedding space",
+    ":material/tune: Sensitivity analysis",
+]
 tab1, tab2, tab3, tab4, tab5 = st.tabs(
-    [
-        ":material/forum: Ask",
-        _review_tab_label,
-        ":material/history: Audit log",
-        ":material/scatter_plot: Embedding space",
-        ":material/tune: Sensitivity analysis",
-    ],
+    _TAB_LABELS,
     key="main_tabs",
+    default=st.session_state.get("main_tabs", _TAB_LABELS[0]),
+    on_change="rerun",
 )
 with tab1:
     ask_tab()
