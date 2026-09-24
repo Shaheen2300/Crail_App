@@ -610,8 +610,36 @@ def review_tab() -> None:
         st.caption("Nothing resolved yet.")
     for item in resolved:
         with st.expander(f"[{item['status']}] {item['query']}"):
-            st.markdown(f"**Final answer:** {item.get('final_answer', '(none)')}")
-            st.caption(f"Reviewer: {item.get('reviewer') or '(unspecified)'}")
+            st.caption(
+                f"Tier {item['tier']} at the time | RRI {item['rri']} | "
+                f"contamination {item['contamination_ratio']} | "
+                f"confidence mismatch: {item['confidence_mismatch']}"
+            )
+
+            naive_col, final_col = st.columns(2)
+            with naive_col:
+                st.markdown("**Without CRAIL** (naive draft, from all retrieved chunks)")
+                st.caption(item["draft_answer"])
+            with final_col:
+                st.markdown("**After human review**")
+                st.caption(item.get("final_answer") or "(no final answer recorded)")
+
+            status_notes = []
+            if item.get("grounding_override"):
+                status_notes.append(":material/warning: submitted via grounding-check override")
+            if item.get("suggested_answer") and item.get("suggested_answer") != item.get("final_answer"):
+                status_notes.append("the CRAIL-suggested answer was edited before submission")
+            if status_notes:
+                st.caption(" · ".join(status_notes))
+
+            st.caption(
+                f"Status: `{item['status']}` | Reviewer: {item.get('reviewer') or '(unspecified)'} | "
+                f"Resolved: {item.get('resolved_at', '(unknown)')}"
+            )
+
+            with st.expander("Retrieved chunks at the time", icon=":material/list:"):
+                for chunk in item["retrieved"]:
+                    render_chunk_dict(chunk, item["current_doc_id"])
 
 
 def audit_tab() -> None:
