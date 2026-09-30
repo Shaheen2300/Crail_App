@@ -12,6 +12,50 @@ whether the answer sounds confidently source-grounded (confidence). It then
 routes the response: deliver it, hold it for a human reviewer, or block it
 outright.
 
+## Research context
+
+CRAIL is the working prototype behind *Silent Poisoning: Stale Context
+Persistence, Adversarial Injection, and Human Trust Miscalibration in
+Retrieval-Augmented Generation Systems* (Mishra & Memon, 2026; working
+paper in preparation for journal submission).
+
+The paper's 60-query pilot covered 6 document pairs × 10 queries across
+policy, healthcare, and technical domains, using an earlier prototype. In
+that pilot, **73.3%** of queries (44/60) retrieved chunks from the wrong
+document with no visible warning to the user, and CRAIL intercepted
+**72.7%** (32/44) of those contaminated outputs. The misses from that pilot
+led to the threshold fix described under *Key implementation choices*
+below. This repo is the rebuilt app plus the larger evaluation harnesses.
+
+## How it works
+
+```
+PDF upload ─► chunk + stamp source_doc ─► FAISS ─► top-k retrieval (MMR)
+                                                   │
+                     ┌─────────────────────────────┘
+                     ▼
+     provenance: contamination ratio ─┐
+     confidence: keyword or LLM judge ┴─► RRI score ─► Tier 1 deliver
+                                                      Tier 2 hold for human review
+                                                      Tier 3 block, human reply required
+                                                            │
+                                                            ▼
+                                                  review queue + audit log
+```
+
+**Stack:** Python 3.11, Streamlit, LangChain, FAISS, OpenAI
+(`gpt-4o-mini` chat and judge, `text-embedding-3-small` embeddings; each
+can be overridden in `.env`), Plotly.
+
+| Path | What it does |
+|---|---|
+| `app.py` | Streamlit UI: Ask, Review Queue, and Audit Log tabs |
+| `config.py` | Every tunable constant; reads secrets from `.env` or Streamlit secrets |
+| `crail/ingestion.py`, `vectorstore.py`, `retrieval.py`, `generation.py` | RAG pipeline |
+| `crail/provenance.py`, `confidence.py`, `rri.py` | The three CRAIL signals and the risk score |
+| `crail/review_queue.py`, `audit.py` | Human-in-the-loop queue and decision log |
+| `evaluate*.py` | Offline evaluation harnesses (in-memory index; they never touch the app's live data) |
+
 ## Setup
 
 ```bash
@@ -19,6 +63,7 @@ py -3.11 -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
 copy .env.example .env   # then edit .env and add your OPENAI_API_KEY
+# macOS/Linux: python3.11 -m venv .venv && source .venv/bin/activate && cp .env.example .env
 streamlit run app.py
 ```
 
@@ -90,3 +135,19 @@ streamlit run app.py
   many chunks each document contributes relative to `TOP_K`; don't treat
   any single run's interception rate as a general number. See `evaluate.py`
   for the harness used to measure this.
+
+## Evaluation harnesses
+
+Each script uses the real pipeline: real PDFs, embeddings, generation, and
+RRI scoring. Results go to git-ignored `eval_results*.json` files.
+
+| Script | Question it answers |
+|---|---|
+| `evaluate_pairs.py` | Regression check for the Tier 2 blind spot on the original 3 document pairs |
+| `evaluate.py` | Does contamination stay stable as a shared index grows from 5 to 10 to 20 documents? |
+| `evaluate_borderline.py` | Can a zero-tolerance threshold tell harmful contamination from benign cross-document overlap? |
+| `evaluate_real_docs.py` | The same test on large real documents: is near-universal flagging a small-corpus artifact? |
+| `evaluate_broad_retrieval.py` | Summary/analysis queries: clean on isolated indexes, and correctly flagged on a shared, never-cleared index? |
+
+Also runs in GitHub Codespaces: the `.devcontainer` installs the
+requirements and starts Streamlit automatically.

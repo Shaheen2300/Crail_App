@@ -9,3 +9,4 @@ openai>=1.40
 python-dotenv>=1.0
 scikit-learn>=1.5
 plotly>=5.24
+fpdf2>=2.7  # only needed for the evaluate*.py harnesses
